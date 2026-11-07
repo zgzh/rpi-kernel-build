@@ -1,0 +1,67 @@
+name: Cross-Compile Raspberry Pi Kernel
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - rpi-6.18.y
+
+# 必须赋予 contents: write 权限，以便 Action 能够创建 Release 并上传文件
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies & Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            bc \
+            bison \
+            flex \
+            libssl-dev \
+            libelf-dev \
+            pahole \
+            git \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu
+
+      - name: Configure Kernel with BTF
+        run: |
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcm2711_defconfig
+          ./scripts/config --enable CONFIG_DEBUG_INFO
+          ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
+          ./scripts/config --enable CONFIG_DEBUG_INFO_BTF
+          yes "" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- oldconfig
+
+      - name: Build Kernel Image & DTBs
+        run: |
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) Image dtbs
+
+      - name: Package Kernel Output
+        run: |
+          mkdir -p pi4_kernel_output/boot
+          cp arch/arm64/boot/Image pi4_kernel_output/boot/kernel8.img
+          mkdir -p pi4_kernel_output/boot/overlays
+          cp arch/arm64/boot/dts/broadcom/*.dtb pi4_kernel_output/boot/
+          cp arch/arm64/boot/dts/overlays/*.dtbo pi4_kernel_output/boot/overlays/ 2>/dev/null || true
+          
+          # 将输出目录打包为压缩包，方便上传到 Release
+          tar -czf rpi4-kernel-btf-v6.18.tar.gz -C pi4_kernel_output .
+
+      - name: Release and Upload Kernel Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: kernel-v6.18-${{ github.run_number }}
+          name: "Raspberry Pi 4 Kernel v6.18 (BTF Support)"
+          body: |
+            自动编译的树莓派 4 Linux 6.18 内核镜像。
+            - 包含完整的 eBPF/BTF 调试支持 (`CONFIG_DEBUG_INFO_BTF=y`)
+            - 附带匹配的设备树文件 (`.dtb` 和 `.dtbo`)
+          files: rpi4-kernel-btf-v6.18.tar.gz
