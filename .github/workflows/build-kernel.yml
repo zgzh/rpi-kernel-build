@@ -1,4 +1,4 @@
-name: Cross-Compile Raspberry Pi Kernels (v6.18 BTF)
+name: Cross-Compile Raspberry Pi Kernels (v6.18 DEB)
 
 on:
   workflow_dispatch:
@@ -18,10 +18,8 @@ jobs:
         include:
           - board: pi4
             defconfig: bcm2711_defconfig
-            image_name: kernel8.img
           - board: pi5
             defconfig: bcm2712_defconfig
-            image_name: kernel_2712.img
 
     steps:
       - name: Checkout Source Code
@@ -40,7 +38,8 @@ jobs:
             pahole \
             git \
             gcc-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu
+            binutils-aarch64-linux-gnu \
+            dpkg-dev
 
       - name: Configure Kernel with BTF
         run: |
@@ -50,26 +49,28 @@ jobs:
           ./scripts/config --enable CONFIG_DEBUG_INFO_BTF
           yes "" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- oldconfig
 
-      - name: Build Kernel Image & DTBs
+      - name: Build Kernel Debian Packages
         run: |
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) Image dtbs
+          # bindeb-pkg 会自动编译内核、模块、设备树，并在源码目录的上一级生成对应的 .deb 包
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
 
-      - name: Package Kernel Output
+      - name: Package Deb Artifacts
         run: |
-          mkdir -p kernel_output/boot/overlays
-          cp arch/arm64/boot/Image kernel_output/boot/${{ matrix.image_name }}
-          cp arch/arm64/boot/dts/broadcom/*.dtb kernel_output/boot/ 2>/dev/null || true
-          cp arch/arm64/boot/dts/overlays/*.dtbo kernel_output/boot/overlays/ 2>/dev/null || true
+          mkdir -p deb_output
+          # 将上一级目录生成的 deb 文件移动到当前收集目录
+          mv ../*.deb deb_output/
           
-          tar -czf kernel-${{ matrix.board }}-btf-v6.18.tar.gz -C kernel_output .
+          # 打包成 tar.gz 方便一次性上传到 Release
+          tar -czf kernel-${{ matrix.board }}-deb-v6.18.tar.gz -C deb_output .
 
-      - name: Release and Upload Asset
+      - name: Release and Upload Deb Asset
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: kernel-${{ matrix.board }}-v6.18-${{ github.run_number }}
-          name: "Raspberry Pi ${{ matrix.board == 'pi4' ? '4' : '5' }} Kernel v6.18 (BTF Support)"
+          tag_name: kernel-${{ matrix.board }}-deb-v6.18-${{ github.run_number }}
+          name: "Raspberry Pi ${{ matrix.board == 'pi4' ? '4' : '5' }} Kernel v6.18 (Debian Package)"
           body: |
-            自动编译的树莓派 ${{ matrix.board == 'pi4' ? '4' : '5' }} Linux 6.18 内核镜像。
+            自动编译的树莓派 ${{ matrix.board == 'pi4' ? '4' : '5' }} Linux 6.18 标准 Debian 安装包。
+            - 包含 `linux-image` 等 `.deb` 文件
             - 包含完整的 eBPF/BTF 调试支持 (`CONFIG_DEBUG_INFO_BTF=y`)
-            - 附带匹配的设备树文件
-          files: kernel-${{ matrix.board }}-btf-v6.18.tar.gz
+            - 在树莓派上下载后可通过 `sudo dpkg -i linux-image-*.deb` 直接安装
+          files: kernel-${{ matrix.board }}-deb-v6.18.tar.gz
