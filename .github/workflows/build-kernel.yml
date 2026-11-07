@@ -39,14 +39,16 @@ build:
         
         export ARCH=arm64
         export CROSS_COMPILE=aarch64-linux-gnu-
-        export DEB_HOST_ARCH=arm64
+        export KDEB_COMPRESS=gzip
         
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
+      env:
+        DEB_BUILD_OPTIONS: "nocheck"
 
     - name: Package Deb Artifacts
       run: |
         mkdir -p deb_output
-        mv *.deb deb_output/ 2>/dev/null || mv linux/*.deb deb_output/ 2>/dev/null || mv ../*.deb deb_output/ 2>/dev/null || true
+        mv ../*.deb deb_output/ 2>/dev/null || mv linux/*.deb deb_output/ 2>/dev/null || true
         ls -la deb_output/
         tar -czf kernel-pi5-deb.tar.gz -C deb_output .
 
