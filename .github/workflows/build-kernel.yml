@@ -56,6 +56,8 @@ jobs:
       - name: Build Kernel Debian Packages
         run: |
           export DEB_HOST_ARCH=arm64
+          # 忽略交叉编译时的严格依赖架构检查
+          sed -i 's/dpkg-buildpackage /dpkg-buildpackage -d /g' scripts/Makefile.package
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
 
       - name: Package Deb Artifacts
