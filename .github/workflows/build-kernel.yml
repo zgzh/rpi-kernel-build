@@ -20,13 +20,13 @@ build:
         path: 'linux'
         depth: 1
 
-    - name: Install Dependencies & Multiarch Toolchain
+    - name: Install Dependencies & Cross-Build Toolchain
       run: |
         sudo dpkg --add-architecture arm64
         sudo apt-get update
         sudo apt-get install -y \
           build-essential bc bison flex libssl-dev libelf-dev libdw-dev \
-          debhelper pahole git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu dpkg-dev
+          debhelper pahole git dpkg-dev crossbuild-essential-arm64
 
     - name: Configure and Build Kernel DEB
       run: |
@@ -39,7 +39,11 @@ build:
         
         export ARCH=arm64
         export CROSS_COMPILE=aarch64-linux-gnu-
+        export DEB_HOST_ARCH=arm64
         export KDEB_COMPRESS=gzip
+        
+        # 强制让 dpkg-buildpackage 使用 arm64 交叉编译参数并跳过签名
+        sed -i 's/dpkg-buildpackage /dpkg-buildpackage -aarm64 -d -uc -us /g' scripts/Makefile.package || true
         
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
       env:
