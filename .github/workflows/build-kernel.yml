@@ -11,10 +11,6 @@ workflow_dispatch:
 jobs:
 build:
   runs-on: ubuntu-latest
-  env:
-    ARCH: arm64
-    CROSS_COMPILE: aarch64-linux-gnu-
-
   steps:
     - name: Install Dependencies
       run: |
@@ -34,11 +30,13 @@ build:
     - name: Configure and Compile Kernel
       run: |
         cd linux
-        make bcm2712_defconfig
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcm2712_defconfig
         ./scripts/config --enable CONFIG_DEBUG_INFO
         ./scripts/config --disable CONFIG_DEBUG_INFO_BTF
-        yes "" | make oldconfig
-        make -j$(nproc) Image modules
+        yes "" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- oldconfig
+        
+        # 使用 V=1 打印详细编译命令，便于排查
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) Image modules
 
     - name: Package Kernel Artifacts
       run: |
@@ -46,7 +44,7 @@ build:
         mkdir -p ../output/boot ../output/lib/modules
         
         cp arch/arm64/boot/Image ../output/boot/kernel_2712.img
-        make INSTALL_MOD_PATH=../output modules_install
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- INSTALL_MOD_PATH=../output modules_install
         
         cd ../output
         tar -czf ../kernel-pi5-bin.tar.gz .
