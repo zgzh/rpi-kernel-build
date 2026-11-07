@@ -37,6 +37,8 @@ jobs:
             flex \
             libssl-dev \
             libelf-dev \
+            libdw-dev \
+            debhelper \
             pahole \
             git \
             gcc-aarch64-linux-gnu \
@@ -53,15 +55,12 @@ jobs:
 
       - name: Build Kernel Debian Packages
         run: |
-          # bindeb-pkg 会自动编译内核、模块、设备树，并在上一级目录 (../) 生成 .deb 包
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
 
       - name: Package Deb Artifacts
         run: |
           mkdir -p deb_output
-          # 将上一级目录生成的 .deb 文件移动到收集目录
           mv ../*.deb deb_output/
-          
           tar -czf kernel-${{ matrix.board }}-deb-v6.18.tar.gz -C deb_output .
 
       - name: Release and Upload Deb Asset
