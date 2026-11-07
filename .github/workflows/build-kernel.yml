@@ -17,6 +17,7 @@ build:
       with:
         repository: 'raspberrypi/linux'
         ref: ${{ github.event.inputs.kernel_branch || 'rpi-6.18.y' }}
+        path: 'linux-src'
         depth: 1
 
     - name: Install Dependencies & Toolchain
@@ -28,7 +29,7 @@ build:
 
     - name: Configure and Build Pi 5 Kernel (bcm2712)
       run: |
-        cd linux
+        cd linux-src
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcm2712_defconfig
         ./scripts/config --enable CONFIG_DEBUG_INFO
         ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
@@ -41,7 +42,7 @@ build:
     - name: Package Deb Artifacts
       run: |
         mkdir -p deb_output
-        mv linux/../*.deb deb_output/ || mv ../*.deb deb_output/ || true
+        mv *.deb deb_output/ || mv linux-src/../*.deb deb_output/ || true
         tar -czf kernel-pi5-deb.tar.gz -C deb_output .
 
     - name: Release and Upload Deb Asset
