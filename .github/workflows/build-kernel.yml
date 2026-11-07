@@ -11,17 +11,6 @@ workflow_dispatch:
 jobs:
 build:
   runs-on: ubuntu-latest
-  strategy:
-    fail-fast: false
-    matrix:
-      include:
-        - board: pi4
-          defconfig: bcm2711_defconfig
-          board_num: "4"
-        - board: pi5
-          defconfig: bcm2712_defconfig
-          board_num: "5"
-
   steps:
     - name: Clone Official Raspberry Pi Kernel Source
       uses: actions/checkout@v4
@@ -37,10 +26,10 @@ build:
           build-essential bc bison flex libssl-dev libelf-dev libdw-dev \
           debhelper pahole git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu dpkg-dev
 
-    - name: Build kernel arm64
+    - name: Configure and Build Pi 5 Kernel (bcm2712)
       run: |
         cd linux
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- ${{ matrix.defconfig }}
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcm2712_defconfig
         ./scripts/config --enable CONFIG_DEBUG_INFO
         ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
         ./scripts/config --enable CONFIG_DEBUG_INFO_BTF
@@ -49,17 +38,17 @@ build:
         sed -i 's/dpkg-buildpackage /dpkg-buildpackage -d /g' scripts/Makefile.package
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
 
-    - name: Tar build
+    - name: Package Deb Artifacts
       run: |
         mkdir -p deb_output
         mv linux/../*.deb deb_output/ || mv ../*.deb deb_output/ || true
-        tar -czf kernel-${{ matrix.board }}-deb.tar.gz -C deb_output .
+        tar -czf kernel-pi5-deb.tar.gz -C deb_output .
 
-    - name: Upload results
+    - name: Release and Upload Deb Asset
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: kernel-${{ matrix.board }}-deb-${{ github.run_number }}
-        name: "Raspberry Pi ${{ matrix.board_num }} Kernel (Debian Package)"
-        files: kernel-${{ matrix.board }}-deb.tar.gz
+        tag_name: kernel-pi5-deb-${{ github.run_number }}
+        name: "Raspberry Pi 5 Kernel (Debian Package)"
+        files: kernel-pi5-deb.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
