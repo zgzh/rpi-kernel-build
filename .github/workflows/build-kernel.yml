@@ -1,4 +1,4 @@
-name: Remote RPi Kernel Build (DEB)
+name: Remote RPi Kernel Build
 
 on:
 workflow_dispatch:
@@ -20,15 +20,14 @@ build:
         path: 'linux'
         depth: 1
 
-    - name: Install Dependencies & Cross-Build Toolchain
+    - name: Install Dependencies & Toolchain
       run: |
-        sudo dpkg --add-architecture arm64
         sudo apt-get update
         sudo apt-get install -y \
           build-essential bc bison flex libssl-dev libelf-dev libdw-dev \
-          debhelper pahole git dpkg-dev crossbuild-essential-arm64
+          debhelper pahole git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
 
-    - name: Configure and Build Kernel DEB
+    - name: Configure and Compile Kernel
       run: |
         cd linux
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcm2712_defconfig
@@ -37,30 +36,30 @@ build:
         ./scripts/config --enable CONFIG_DEBUG_INFO_BTF
         yes "" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- oldconfig
         
-        export ARCH=arm64
-        export CROSS_COMPILE=aarch64-linux-gnu-
-        export DEB_HOST_ARCH=arm64
-        export KDEB_COMPRESS=gzip
-        
-        # 强制让 dpkg-buildpackage 使用 arm64 交叉编译参数并跳过签名
-        sed -i 's/dpkg-buildpackage /dpkg-buildpackage -aarm64 -d -uc -us /g' scripts/Makefile.package || true
-        
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
-      env:
-        DEB_BUILD_OPTIONS: "nocheck"
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) Image modules dtbs
 
-    - name: Package Deb Artifacts
+    - name: Package Kernel Artifacts
       run: |
-        mkdir -p deb_output
-        mv ../*.deb deb_output/ 2>/dev/null || mv linux/*.deb deb_output/ 2>/dev/null || true
-        ls -la deb_output/
-        tar -czf kernel-pi5-deb.tar.gz -C deb_output .
+        cd linux
+        mkdir -p output/boot/firmware/overlays output/lib/modules
+        
+        # 收集内核镜像与设备树
+        cp arch/arm64/boot/Image ../output/boot/kernel_2712.img
+        cp arch/arm64/boot/dts/broadcom/*.dtb ../output/boot/firmware/
+        cp arch/arm64/boot/dts/overlays/*.dtb* ../output/boot/firmware/overlays/
+        cp arch/arm64/boot/dts/overlays/README ../output/boot/firmware/overlays/
+        
+        # 安装模块
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- INSTALL_MOD_PATH=../output modules_install
+        
+        cd ../output
+        tar -czf ../kernel-pi5-bin.tar.gz .
 
-    - name: Release and Upload Deb Asset
+    - name: Release and Upload Asset
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: kernel-pi5-deb-${{ github.run_number }}
-        name: "Raspberry Pi 5 Kernel (Debian Package)"
-        files: kernel-pi5-deb.tar.gz
+        tag_name: kernel-pi5-bin-${{ github.run_number }}
+        name: "Raspberry Pi 5 Kernel Binary (Tarball)"
+        files: kernel-pi5-bin.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
