@@ -11,8 +11,12 @@ workflow_dispatch:
 jobs:
 build:
   runs-on: ubuntu-latest
+  env:
+    ARCH: arm64
+    CROSS_COMPILE: aarch64-linux-gnu-
+
   steps:
-    - name: Install Dependencies & Build Tools
+    - name: Install Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -30,12 +34,11 @@ build:
     - name: Configure and Compile Kernel
       run: |
         cd linux
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcm2712_defconfig
+        make bcm2712_defconfig
         ./scripts/config --enable CONFIG_DEBUG_INFO
         ./scripts/config --disable CONFIG_DEBUG_INFO_BTF
-        yes "" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- oldconfig
-        
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) Image modules
+        yes "" | make oldconfig
+        make -j$(nproc) Image modules
 
     - name: Package Kernel Artifacts
       run: |
@@ -43,7 +46,7 @@ build:
         mkdir -p ../output/boot ../output/lib/modules
         
         cp arch/arm64/boot/Image ../output/boot/kernel_2712.img
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- INSTALL_MOD_PATH=../output modules_install
+        make INSTALL_MOD_PATH=../output modules_install
         
         cd ../output
         tar -czf ../kernel-pi5-bin.tar.gz .
