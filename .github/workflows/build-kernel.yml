@@ -55,6 +55,7 @@ jobs:
 
       - name: Build Kernel Debian Packages
         run: |
+          export DEB_HOST_ARCH=arm64
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
 
       - name: Package Deb Artifacts
