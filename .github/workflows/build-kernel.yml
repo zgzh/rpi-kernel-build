@@ -11,7 +11,16 @@ workflow_dispatch:
 jobs:
 build:
   runs-on: ubuntu-latest
+  container:
+    image: ubuntu:24.04
   steps:
+    - name: Install System Dependencies
+      run: |
+        apt-get update
+        apt-get install -y \
+          build-essential bc bison flex libssl-dev libelf-dev libdw-dev \
+          debhelper pahole git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+
     - name: Clone Official Raspberry Pi Kernel Source
       uses: actions/checkout@v4
       with:
@@ -19,13 +28,6 @@ build:
         ref: ${{ github.event.inputs.kernel_branch || 'rpi-6.18.y' }}
         path: 'linux'
         depth: 1
-
-    - name: Install Dependencies & Toolchain
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential bc bison flex libssl-dev libelf-dev libdw-dev \
-          debhelper pahole git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
 
     - name: Configure and Compile Kernel
       run: |
@@ -43,10 +45,7 @@ build:
         cd linux
         mkdir -p ../output/boot ../output/lib/modules
         
-        # 复制内核镜像
         cp arch/arm64/boot/Image ../output/boot/kernel_2712.img
-        
-        # 安装模块
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- INSTALL_MOD_PATH=../output modules_install
         
         cd ../output
