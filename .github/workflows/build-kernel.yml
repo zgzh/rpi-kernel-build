@@ -1,110 +1,65 @@
-name: Pi kernel build tests
+name: Remote RPi Kernel Build (DEB)
 
 on:
-  pull_request:
-    paths-ignore:
-      - '.github/**'
-    branches: [ "rpi-*" ]
-  push:
-    paths-ignore:
-      - '.github/**'
-    branches: [ "rpi-*" ]
-  workflow_dispatch:
-
-env:
-  NUM_JOBS: 6
+workflow_dispatch:
+  inputs:
+    kernel_branch:
+      description: 'Target branch from official repo'
+      required: true
+      default: 'rpi-6.18.y'
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04-arm
-    strategy:
-      matrix:
-        include:
-          - name: bcm2835
-            arch: arm
-            defconfig: bcm2835_defconfig
-            kernel: kernel
-            retention: 5
+build:
+  runs-on: ubuntu-latest
+  strategy:
+    fail-fast: false
+    matrix:
+      include:
+        - board: pi4
+          defconfig: bcm2711_defconfig
+          board_num: "4"
+        - board: pi5
+          defconfig: bcm2712_defconfig
+          board_num: "5"
 
-          - name: arm64
-            arch: arm64
-            defconfig: defconfig
-            kernel: kernel8
-            retention: 5
+  steps:
+    - name: Clone Official Raspberry Pi Kernel Source
+      uses: actions/checkout@v4
+      with:
+        repository: 'raspberrypi/linux'
+        ref: ${{ github.event.inputs.kernel_branch || 'rpi-6.18.y' }}
+        depth: 1
 
-          - name: bcmrpi
-            arch: arm
-            defconfig: bcmrpi_defconfig
-            kernel: kernel
-            retention: 90
-
-          - name: bcm2709
-            arch: arm
-            defconfig: bcm2709_defconfig
-            kernel: kernel7
-            retention: 90
-
-          - name: bcm2711
-            arch: arm64
-            defconfig: bcm2711_defconfig
-            kernel: kernel8
-            retention: 90
-
-          - name: bcm2711_rt
-            arch: arm64
-            defconfig: bcm2711_rt_defconfig
-            kernel: kernel8_rt
-            retention: 30
-
-          - name: bcm2712
-            arch: arm64
-            defconfig: bcm2712_defconfig
-            kernel: kernel_2712
-            retention: 90
-
-    steps:
-    - name: Install armhf crossbuild toolchain
-      if: matrix.arch == 'arm'
-      env:
-        DEBIAN_FRONTEND: noninteractive
+    - name: Install Dependencies & Toolchain
       run: |
         sudo apt-get update
-        sudo apt-get install -y gcc-arm-linux-gnueabihf
-      timeout-minutes: 15
+        sudo apt-get install -y \
+          build-essential bc bison flex libssl-dev libelf-dev libdw-dev \
+          debhelper pahole git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu dpkg-dev
 
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
-        clean: true
-
-    - name: Build kernel ${{matrix.name}}
+    - name: Build kernel arm64
       run: |
-        mkdir ${{github.workspace}}/build
-        export ARCH=${{matrix.arch}}
-        if [[ "$ARCH" == "arm64" ]]; then
-          export DTS_SUBDIR=broadcom
-          export IMAGE=Image.gz
-        else
-          export CROSS_COMPILE=arm-linux-gnueabihf-
-          export DTS_SUBDIR=broadcom
-          export IMAGE=zImage
-        fi
-        make O=${{github.workspace}}/build ${{matrix.defconfig}}
-        scripts/config --file ${{github.workspace}}/build/.config --set-val CONFIG_WERROR y
-        make O=${{github.workspace}}/build -j ${{env.NUM_JOBS}} $IMAGE modules dtbs
-        mkdir -p ${{github.workspace}}/install/boot/overlays
-        make O=${{github.workspace}}/build INSTALL_MOD_PATH=${{github.workspace}}/install modules_install
-        cp ${{github.workspace}}/build/arch/${ARCH}/boot/dts/${DTS_SUBDIR}/*.dtb ${{github.workspace}}/install/boot/
-        cp ${{github.workspace}}/build/arch/${ARCH}/boot/dts/overlays/*.dtb* ${{github.workspace}}/install/boot/overlays/
-        cp ${{github.workspace}}/arch/${ARCH}/boot/dts/overlays/README ${{github.workspace}}/install/boot/overlays/
-        cp ${{github.workspace}}/build/arch/${ARCH}/boot/$IMAGE ${{github.workspace}}/install/boot/${{matrix.kernel}}.img
+        cd linux
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- ${{ matrix.defconfig }}
+        ./scripts/config --enable CONFIG_DEBUG_INFO
+        ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
+        ./scripts/config --enable CONFIG_DEBUG_INFO_BTF
+        yes "" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- oldconfig
+        export DEB_HOST_ARCH=arm64
+        sed -i 's/dpkg-buildpackage /dpkg-buildpackage -d /g' scripts/Makefile.package
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
 
     - name: Tar build
-      run: tar -cvf ${{matrix.name}}_build.tar -C ${{github.workspace}}/install .
+      run: |
+        mkdir -p deb_output
+        mv linux/../*.deb deb_output/ || mv ../*.deb deb_output/ || true
+        tar -czf kernel-${{ matrix.board }}-deb.tar.gz -C deb_output .
 
     - name: Upload results
-      uses: actions/upload-artifact@v4
+      uses: softprops/action-gh-release@v2
       with:
-        name: ${{matrix.name}}_build
-        path: ${{matrix.name}}_build.tar
-        retention-days: ${{matrix.retention}}
+        tag_name: kernel-${{ matrix.board }}-deb-${{ github.run_number }}
+        name: "Raspberry Pi ${{ matrix.board_num }} Kernel (Debian Package)"
+        files: kernel-${{ matrix.board }}-deb.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
