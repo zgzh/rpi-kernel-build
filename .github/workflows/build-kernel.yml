@@ -11,15 +11,14 @@ workflow_dispatch:
 jobs:
 build:
   runs-on: ubuntu-latest
-  container:
-    image: ubuntu:24.04
   steps:
-    - name: Install System Dependencies
+    - name: Install Dependencies & Build Tools
       run: |
-        apt-get update
-        apt-get install -y \
+        sudo apt-get update
+        sudo apt-get install -y \
           build-essential bc bison flex libssl-dev libelf-dev libdw-dev \
-          debhelper pahole git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          debhelper git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+          libtool autoconf cmake libsqlite3-dev libargp-dev dwarves
 
     - name: Clone Official Raspberry Pi Kernel Source
       uses: actions/checkout@v4
