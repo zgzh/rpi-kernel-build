@@ -20,14 +20,15 @@ build:
         path: 'linux'
         depth: 1
 
-    - name: Install Dependencies & Toolchain
+    - name: Install Dependencies & Multiarch Toolchain
       run: |
+        sudo dpkg --add-architecture arm64
         sudo apt-get update
         sudo apt-get install -y \
           build-essential bc bison flex libssl-dev libelf-dev libdw-dev \
           debhelper pahole git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu dpkg-dev
 
-    - name: Configure and Build Kernel
+    - name: Configure and Build Kernel DEB
       run: |
         cd linux
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcm2712_defconfig
@@ -39,7 +40,7 @@ build:
         export ARCH=arm64
         export CROSS_COMPILE=aarch64-linux-gnu-
         export DEB_HOST_ARCH=arm64
-        sed -i 's/dpkg-buildpackage /dpkg-buildpackage -d -aarm64 -uc -us /g' scripts/Makefile.package || true
+        
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j$(nproc)
 
     - name: Package Deb Artifacts
