@@ -1,0 +1,108 @@
+name: Remote RPi 3 Kernel Build (DEB)
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_branch:
+        description: 'Target branch from official repo'
+        required: true
+        default: 'rpi-6.6.y'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - board: pi3
+            defconfig: bcm2709_defconfig
+            board_num: "3 (B/B+/etc.)"
+
+    steps:
+      - name: Clone Official Raspberry Pi Kernel Source
+        uses: actions/checkout@v4
+        with:
+          repository: 'raspberrypi/linux'
+          ref: ${{ github.event.inputs.kernel_branch || 'rpi-6.6.y' }}
+          depth: 1
+
+      - name: Install Dependencies & Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential bc bison flex libssl-dev libelf-dev libdw-dev \
+            debhelper pahole git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu dpkg-dev
+
+      - name: Configure Kernel with BTF
+        run: |
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- ${{ matrix.defconfig }}
+          ./scripts/config --enable CONFIG_DEBUG_INFO
+          ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
+          ./scripts/config --enable CONFIG_DEBUG_INFO_BTF
+          yes "" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- oldconfig
+
+      - name: Build Kernel Debian Packages
+        run: |
+          export DEB_HOST_ARCH=arm64
+          sed -i 's/dpkg-buildpackage /dpkg-buildpackage -d /g' scripts/Makefile.package
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j1
+
+      - name: Package Deb Artifacts
+        run: |
+          mkdir -p deb_output
+          mv ../*.deb deb_output/
+          tar -czf kernel-${{ matrix.board }}-deb.tar.gz -C deb_output .
+
+      - name: Release and Upload Deb Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: kernel-${{ matrix.board }}-deb-${{ github.run_number }}
+          name: "Raspberry Pi ${{ matrix.board_num }} Kernel (Debian Package)"
+          body: |
+            ### 🚀 树莓派 3 专用 Linux 内核包
+            - 针对树莓派 3 架构优化 (`bcm2709_defconfig`)
+            - 包含 eBPF/BTF 调试支持 (`CONFIG_DEBUG_INFO_BTF=y`)
+            - 采用单线程 `-j1` 规避打包冲突
+
+            ---
+
+            ### 📦 树莓派 3 安装与配置指南
+
+            下载并解压 `.tar.gz` 后，在树莓派 3 本地执行：
+
+            #### 1. 安装 Debian 软件包
+            ```bash
+            sudo dpkg -i linux-headers-*.deb
+            sudo dpkg -i linux-image-*.deb
+            ```
+
+            #### 2. 同步内核到引导分区
+            树莓派 3 的新版系统同样使用 `/boot/firmware/` 作为引导分区：
+            ```bash
+            # 请根据实际生成的版本号替换
+            sudo cp /boot/vmlinuz-*-v8+ /boot/firmware/
+            sudo cp /boot/initrd.img-*-v8+ /boot/firmware/
+            ```
+
+            #### 3. 修改引导配置
+            编辑 `/boot/firmware/config.txt`，在末尾添加：
+            ```text
+            kernel=vmlinuz-你的实际版本号-v8+
+            initramfs initrd.img-你的实际版本号-v8+ followkernel
+            ```
+
+            #### 4. 重启生效
+            ```bash
+            sync
+            sudo reboot
+            ```
+          files: kernel-${{ matrix.board }}-deb.tar.gz
+
+      - name: Clean Up Old Releases
+        uses: dev-drprasad/delete-tag-and-release@v1.1.0
+        with:
+          keep_latest: 3
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
