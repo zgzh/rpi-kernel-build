@@ -1,10 +1,10 @@
-name: Cross-Compile Raspberry Pi 5 Kernel
+name: Cross-Compile Raspberry Pi 5 Kernel (v6.18)
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - rpi-5.x # 你可以为树莓派 5 单独开辟一个分支，或者改成你当前的分支
+      - rpi-6.18.y
 
 permissions:
   contents: write
@@ -31,9 +31,8 @@ jobs:
             gcc-aarch64-linux-gnu \
             binutils-aarch64-linux-gnu
 
-      - name: Configure Kernel for Pi 5 with BTF
+      - name: Configure Kernel for Pi 5 (v6.18) with BTF
         run: |
-          # 树莓派 5 使用 bcm2712_defconfig
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcm2712_defconfig
           ./scripts/config --enable CONFIG_DEBUG_INFO
           ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
@@ -47,22 +46,22 @@ jobs:
       - name: Package Pi 5 Kernel Output
         run: |
           mkdir -p pi5_kernel_output/boot
-          # 树莓派 5 的内核镜像文件名为 kernel_2712.img
+          # 树莓派 5 专属的内核镜像文件名
           cp arch/arm64/boot/Image pi5_kernel_output/boot/kernel_2712.img
           mkdir -p pi5_kernel_output/boot/overlays
-          cp arch/arm64/boot/dts/broadcom/*.dtb pi5_kernel_output/boot/
+          cp arch/arm64/boot/dts/broadcom/*.dtb pi5_kernel_output/boot/ 2>/dev/null || true
           cp arch/arm64/boot/dts/overlays/*.dtbo pi5_kernel_output/boot/overlays/ 2>/dev/null || true
           
           tar -czf rpi5-kernel-btf-v6.18.tar.gz -C pi5_kernel_output .
 
-      - name: Release and Upload Pi 5 Kernel Asset
+      - name: Release and Upload Pi 5 Asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: kernel-rpi5-v6.18-${{ github.run_number }}
           name: "Raspberry Pi 5 Kernel v6.18 (BTF Support)"
           body: |
-            自动编译的树莓派 5 Linux 6.18 内核镜像。
-            - 针对 BCM2712 (`bcm2712_defconfig`) 编译
+            树莓派 5 自动编译的 Linux 6.18 内核镜像。
+            - 基于 `bcm2712_defconfig` 编译
             - 包含完整的 eBPF/BTF 调试支持 (`CONFIG_DEBUG_INFO_BTF=y`)
             - 附带树莓派 5 匹配的设备树文件
           files: rpi5-kernel-btf-v6.18.tar.gz
