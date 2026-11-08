@@ -23,13 +23,14 @@ jobs:
       - name: Checkout Raspberry Pi Linux
         uses: actions/checkout@v4
         with:
-          repository: raspberrypi/linux
-          ref: rpi-6.18.y
-          path: linux
+          repository: 'raspberrypi/linux'
+          ref: 'rpi-6.18.y'
+          path: 'linux'
           fetch-depth: 1
 
       - name: Install Build Dependencies
         run: |
+          sudo dpkg --add-architecture arm64
           sudo apt-get update
 
           sudo apt-get install -y \
@@ -48,8 +49,7 @@ jobs:
             libelf-dev \
             libdw-dev \
             libncurses-dev \
-            gcc-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu
+            crossbuild-essential-arm64
 
       - name: Configure Kernel
         run: |
@@ -89,6 +89,7 @@ jobs:
             KDEB_PKGVERSION=$(date +%Y%m%d)-${GITHUB_RUN_NUMBER} \
             KDEB_CHANGELOG_DIST=bookworm \
             KBUILD_DEBARCH=arm64 \
+            KDEB_FLAGS="-aarm64 -uc -us" \
             -j$(nproc) \
             bindeb-pkg
 
