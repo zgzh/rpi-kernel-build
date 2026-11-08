@@ -1,0 +1,148 @@
+name: Kernel Config Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  config:
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model: pi3
+            defconfig: bcm2711_defconfig
+
+          - model: pi4
+            defconfig: bcm2711_defconfig
+
+          - model: pi5
+            defconfig: bcm2712_defconfig
+
+    name: Config ${{ matrix.model }}
+
+    steps:
+      - name: Checkout Raspberry Pi Linux
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/linux
+          ref: rpi-6.18.y
+          path: linux
+          fetch-depth: 1
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            build-essential \
+            debhelper \
+            debhelper-compat \
+            libssl-dev \
+            bc \
+            bison \
+            flex \
+            dwarves \
+            libssl-dev \
+            libelf-dev \
+            libdw-dev \
+            libncurses-dev \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu
+
+      - name: Verify pahole
+        run: |
+          which pahole
+          pahole --version
+
+      - name: Configure Kernel
+        run: |
+          cd linux
+
+          make \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            ${{ matrix.defconfig }}
+
+          ./scripts/config --enable CONFIG_BPF
+          ./scripts/config --enable CONFIG_BPF_SYSCALL
+          ./scripts/config --enable CONFIG_DEBUG_INFO
+          ./scripts/config --enable CONFIG_DEBUG_INFO_BTF
+          ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF5
+
+          make \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            olddefconfig
+
+      - name: Verify Config
+        run: |
+          cd linux
+
+          grep '^CONFIG_BPF=y' .config
+          grep '^CONFIG_BPF_SYSCALL=y' .config
+          grep '^CONFIG_DEBUG_INFO=y' .config
+          grep '^CONFIG_DEBUG_INFO_BTF=y' .config
+
+          echo
+          echo "Kernel release:"
+          make kernelrelease
+
+      - name: Check Build Dependencies
+        run: |
+          cd linux
+          dpkg-checkbuilddeps debian/control || true
+
+      - name: Build Debian Packages
+        run: |
+          cd linux
+
+          export KBUILD_BUILD_USER=github
+          export KBUILD_BUILD_HOST=actions
+
+          make \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            KDEB_PKGVERSION=$(date +%Y%m%d)-${GITHUB_RUN_NUMBER}-${{ matrix.model }} \
+            -j$(nproc) \
+            bindeb-pkg
+
+      - name: Verify vmlinux
+        run: |
+          cd linux
+
+          test -f vmlinux
+
+          echo "===== vmlinux ====="
+
+          ls -lh vmlinux
+
+          file vmlinux
+
+      - name: Verify BTF Section
+        run: |
+          cd linux
+
+          echo "===== BTF ====="
+
+          readelf -S vmlinux | grep '\.BTF'
+
+      - name: Collect Packages
+        run: |
+          mkdir -p release/${{ matrix.model }}
+
+          find .. -maxdepth 1 -name "*.deb" \
+            -exec cp {} release/${{ matrix.model }}/ \;
+
+          find .. -maxdepth 1 -name "*.changes" \
+            -exec cp {} release/${{ matrix.model }}/ \;
+
+          find .. -maxdepth 1 -name "*.buildinfo" \
+            -exec cp {} release/${{ matrix.model }}/ \;
+
+      - name: Upload Packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ matrix.model }}
+          path: release/${{ matrix.model }}
