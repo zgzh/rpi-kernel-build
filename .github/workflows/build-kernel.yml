@@ -73,8 +73,19 @@ jobs:
           yamllint -c .yamllint .github/workflows
 
       - name: Validate Workflow
-        uses: rhysd/actionlint@v1
+      - name: Install actionlint
 
+        run: |
+
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+
+
+
+      - name: Validate Workflow
+
+        run: |
+
+          ./actionlint -color
       - name: Checkout Raspberry Pi Linux
         uses: actions/checkout@v4
         with:
