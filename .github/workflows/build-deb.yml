@@ -29,6 +29,12 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
+      - name: Sync Latest Upstream Kernel Source
+        run: |
+          git remote add upstream https://github.com/raspberrypi/linux.git || true
+          git fetch upstream rpi-6.18.y
+          git merge upstream/rpi-6.18.y --no-edit
+
       - name: Install Dependencies & Toolchain
         run: |
           sudo apt-get update
@@ -117,8 +123,7 @@ jobs:
           tag_name: kernel-${{ matrix.board }}-deb-v6.18-${{ github.run_number }}
           name: "Raspberry Pi ${{ matrix.board_num }} Kernel v6.18 + Boot Configurator"
           body: |
-            自动编译的树莓派 ${{ matrix.board_num }} Linux 6.18 安装包：
-            - 包含内核 `.deb` 核心包
+            自动拉取树莓派官方最新源码并编译的 v6.18 安装包：
+            - 包含官方最新内核 `.deb` 核心包
             - 包含专用的引导配置辅助包 (`rpi-boot-configurator-${{ matrix.board }}`)
-            - 安装辅助包后会自动调整 `/boot/config.txt` 中的 `kernel=` 指向 `${{ matrix.kernel_img }}`。
           files: kernel-${{ matrix.board }}-deb-v6.18.tar.gz
