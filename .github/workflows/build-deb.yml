@@ -28,7 +28,7 @@ jobs:
           path: 'linux'
           fetch-depth: 1
 
-      - name: Download Official Arm Toolchain (No Apt Needed)
+      - name: Download Official Arm Toolchain
         run: |
           echo "Downloading Arm GNU Toolchain..."
           wget -q https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz
@@ -39,15 +39,6 @@ jobs:
           echo "$TOOLCHAIN_PATH" >> $GITHUB_PATH
           
           aarch64-none-linux-gnu-gcc --version
-
-      - name: Install Minimal Build Utilities
-        run: |
-          sudo apt-get install -y --no-install-recommends \
-            fakeroot \
-            debhelper \
-            dwarves \
-            libelf-dev \
-            libdw-dev || true
 
       - name: Configure Kernel
         run: |
