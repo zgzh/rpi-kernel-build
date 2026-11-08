@@ -1,90 +1,123 @@
-name: Build Debian Kernel Packages
+name: Cross-Compile Raspberry Pi Kernels (v6.18 DEB)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - rpi-6.18.y
+
+permissions:
+  contents: write
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
-
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - model: pi34
+          - board: pi4
             defconfig: bcm2711_defconfig
-
-          - model: pi5
+            board_num: 4
+            kernel_img: kernel8.img
+          - board: pi5
             defconfig: bcm2712_defconfig
-
-    name: Build DEB ${{ matrix.model }}
+            board_num: 5
+            kernel_img: kernel_2712.img
 
     steps:
-      - name: Checkout Raspberry Pi Linux
+      - name: Checkout Source Code
         uses: actions/checkout@v4
-        with:
-          repository: 'raspberrypi/linux'
-          ref: 'rpi-6.18.y'
-          path: 'linux'
-          fetch-depth: 1
 
-      - name: Verify Preinstalled Toolchain
+      - name: Install Dependencies & Toolchain
         run: |
-          aarch64-linux-gnu-gcc --version
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            bc \
+            bison \
+            flex \
+            libssl-dev \
+            libelf-dev \
+            libdw-dev \
+            debhelper \
+            pahole \
+            git \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu \
+            dpkg-dev
 
-      - name: Configure Kernel
+      - name: Configure Kernel with BTF
         run: |
-          cd linux
-
-          make \
-            ARCH=arm64 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            ${{ matrix.defconfig }}
-
-          ./scripts/config --enable CONFIG_BPF
-          ./scripts/config --enable CONFIG_BPF_SYSCALL
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- ${{ matrix.defconfig }}
           ./scripts/config --enable CONFIG_DEBUG_INFO
+          ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
           ./scripts/config --enable CONFIG_DEBUG_INFO_BTF
-          ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF5
+          yes "" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- oldconfig
 
-          make \
-            ARCH=arm64 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            olddefconfig
-
-      - name: Build Debian Packages
+      - name: Build Kernel Debian Packages
         run: |
-          cd linux
+          export DEB_HOST_ARCH=arm64
+          sed -i 's/dpkg-buildpackage /dpkg-buildpackage -d /g' scripts/Makefile.package
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j1
 
-          export KBUILD_BUILD_USER=github
-          export KBUILD_BUILD_HOST=actions
-
-          make \
-            ARCH=arm64 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            KDEB_PKGVERSION=$(date +%Y%m%d)-${GITHUB_RUN_NUMBER} \
-            KDEB_CHANGELOG_DIST=bookworm \
-            KBUILD_DEBARCH=arm64 \
-            -j$(nproc) \
-            bindeb-pkg
-
-      - name: Collect Packages
+      - name: Build RPi Boot Configurator Deb
         run: |
-          mkdir -p release/${{ matrix.model }}
+          PKG_DIR="rpi-boot-configurator"
+          mkdir -p ${PKG_DIR}/DEBIAN
+          mkdir -p ${PKG_DIR}/etc/rpi-boot
+          
+          cat << 'EOF_CTRL' > ${PKG_DIR}/DEBIAN/control
+          Package: rpi-boot-configurator-${{ matrix.board }}
+          Version: 1.0-${{ github.run_number }}
+          Section: utils
+          Priority: optional
+          Architecture: all
+          Maintainer: RPi Builder <noreply@github.com>
+          Description: Automated boot and config.txt configurator for Raspberry Pi ${{ matrix.board_num }}
+           Automatically configures /boot/config.txt and kernel targets for Raspberry Pi ${{ matrix.board_num }}.
+          EOF_CTRL
 
-          find .. -maxdepth 1 -name "*.deb" \
-            -exec cp {} release/${{ matrix.model }}/ \;
+          cat << 'EOF_POST' > ${PKG_DIR}/DEBIAN/postinst
+          #!/bin/bash
+          set -e
+          if [ "$1" = "configure" ]; then
+              BOOT_DIR="/boot/firmware"
+              [ ! -d "$BOOT_DIR" ] && BOOT_DIR="/boot"
+              
+              TARGET_IMG="${{ matrix.kernel_img }}"
+              echo "==> Configuring boot for Raspberry Pi (${{ matrix.board }}) -> target: ${TARGET_IMG}"
+              
+              if [ -f "${BOOT_DIR}/config.txt" ]; then
+                  if grep -q "^kernel=" "${BOOT_DIR}/config.txt"; then
+                      sed -i "s/^kernel=.*/kernel=${TARGET_IMG}/" "${BOOT_DIR}/config.txt"
+                  else
+                      echo "kernel=${TARGET_IMG}" >> "${BOOT_DIR}/config.txt"
+                  fi
+                  echo "==> Updated /boot/config.txt kernel=${TARGET_IMG}"
+              fi
+          fi
+          exit 0
+          EOF_POST
+          
+          chmod +x ${PKG_DIR}/DEBIAN/postinst
+          dpkg-deb --build ${PKG_DIR}
+          mkdir -p deb_output
+          mv ${PKG_DIR}.deb deb_output/
 
-          find .. -maxdepth 1 -name "*.changes" \
-            -exec cp {} release/${{ matrix.model }}/ \;
+      - name: Package Deb Artifacts
+        run: |
+          mv ../*.deb deb_output/ 2>/dev/null || true
+          tar -czf kernel-${{ matrix.board }}-deb-v6.18.tar.gz -C deb_output .
 
-          find .. -maxdepth 1 -name "*.buildinfo" \
-            -exec cp {} release/${{ matrix.model }}/ \;
-
-          ls -lh release/${{ matrix.model }}
-
-      - name: Upload Packages
-        uses: actions/upload-artifact@v4
+      - name: Release and Upload Deb Asset
+        uses: softprops/action-gh-release@v2
         with:
-          name: deb-${{ matrix.model }}
-          path: release/${{ matrix.model }}
+          tag_name: kernel-${{ matrix.board }}-deb-v6.18-${{ github.run_number }}
+          name: "Raspberry Pi ${{ matrix.board_num }} Kernel v6.18 + Boot Configurator"
+          body: |
+            自动编译的树莓派 ${{ matrix.board_num }} Linux 6.18 安装包：
+            - 包含内核 `.deb` 核心包
+            - 包含专用的引导配置辅助包 (`rpi-boot-configurator-${{ matrix.board }}`)
+            - 安装辅助包后会自动调整 `/boot/config.txt` 中的 `kernel=` 指向 `${{ matrix.kernel_img }}`。
+          files: kernel-${{ matrix.board }}-deb-v6.18.tar.gz
