@@ -30,9 +30,7 @@ jobs:
 
       - name: Install Build Dependencies
         run: |
-          sudo dpkg --add-architecture arm64
-          # 允许 apt-get update 遇到源抖动时继续，避免非致命错误导致整体失败
-          sudo apt-get update || true
+          sudo apt-get update
 
           sudo apt-get install -y \
             build-essential \
@@ -50,6 +48,8 @@ jobs:
             libelf-dev \
             libdw-dev \
             libncurses-dev \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu \
             crossbuild-essential-arm64
 
       - name: Configure Kernel
