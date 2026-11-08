@@ -48,7 +48,6 @@ jobs:
             dpkg-dev
 
       - name: Configure Kernel with BTF
-        working-directory: rpi-6.18.y
         run: |
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- ${{ matrix.defconfig }}
           ./scripts/config --enable CONFIG_DEBUG_INFO
@@ -57,7 +56,6 @@ jobs:
           yes "" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- oldconfig
 
       - name: Build Kernel Debian Packages
-        working-directory: rpi-6.18.y
         run: |
           export DEB_HOST_ARCH=arm64
           sed -i 's/dpkg-buildpackage /dpkg-buildpackage -d /g' scripts/Makefile.package
@@ -110,7 +108,7 @@ jobs:
       - name: Package Deb Artifacts
         run: |
           mkdir -p deb_output
-          mv rpi-6.18.y/*.deb deb_output/ 2>/dev/null || true
+          mv ../*.deb deb_output/ 2>/dev/null || true
           tar -czf kernel-${{ matrix.board }}-deb-v6.18.tar.gz -C deb_output .
 
       - name: Release and Upload Deb Asset
