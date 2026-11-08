@@ -1,26 +1,50 @@
-name: Matrix Test
+name: Kernel Source Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  test:
+  source:
     runs-on: ubuntu-24.04
 
     strategy:
       fail-fast: false
       matrix:
-        model:
-          - pi3
-          - pi4
-          - pi5
+        include:
+          - model: pi3
+            defconfig: bcmrpi3_defconfig
 
-    name: Test ${{ matrix.model }}
+          - model: pi4
+            defconfig: bcm2711_defconfig
+
+          - model: pi5
+            defconfig: bcm2712_defconfig
+
+    name: Source ${{ matrix.model }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Raspberry Pi Linux
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/linux
+          ref: rpi-6.18.y
+          path: linux
+          fetch-depth: 1
 
-      - name: Show Matrix Info
+      - name: Show Source Info
         run: |
+          cd linux
+
           echo "MODEL=${{ matrix.model }}"
-          uname -a
+
+          echo
+          echo "Commit:"
+          git rev-parse HEAD
+
+          echo
+          echo "Latest:"
+          git log -1 --oneline
+
+          echo
+          echo "Top files:"
+          ls -lah | head
