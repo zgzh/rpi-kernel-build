@@ -1,0 +1,114 @@
+name: Build Debian Kernel Packages
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model: pi34
+            defconfig: bcm2711_defconfig
+
+          - model: pi5
+            defconfig: bcm2712_defconfig
+
+    name: Build DEB ${{ matrix.model }}
+
+    steps:
+      - name: Checkout Raspberry Pi Linux
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/linux
+          ref: rpi-6.18.y
+          path: linux
+          fetch-depth: 1
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            build-essential \
+            bc \
+            bison \
+            flex \
+            rsync \
+            cpio \
+            kmod \
+            git \
+            fakeroot \
+            debhelper \
+            dwarves \
+            libssl-dev \
+            libelf-dev \
+            libdw-dev \
+            libncurses-dev \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu
+
+      - name: Configure Kernel
+        run: |
+          cd linux
+
+          make \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            ${{ matrix.defconfig }}
+
+          ./scripts/config --enable CONFIG_BPF
+          ./scripts/config --enable CONFIG_BPF_SYSCALL
+          ./scripts/config --enable CONFIG_DEBUG_INFO
+          ./scripts/config --enable CONFIG_DEBUG_INFO_BTF
+          ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF5
+
+          make \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            olddefconfig
+
+      - name: Show Kernel Release
+        run: |
+          cd linux
+          make kernelrelease
+
+      - name: Build Debian Packages
+        run: |
+          cd linux
+
+          export KBUILD_BUILD_USER=github
+          export KBUILD_BUILD_HOST=actions
+
+          make \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            KDEB_PKGVERSION=$(date +%Y%m%d)-${GITHUB_RUN_NUMBER} \
+            KDEB_CHANGELOG_DIST=bookworm \
+            KBUILD_DEBARCH=arm64 \
+            -j$(nproc) \
+            bindeb-pkg
+
+      - name: Collect Packages
+        run: |
+          mkdir -p release/${{ matrix.model }}
+
+          find .. -maxdepth 1 -name "*.deb" \
+            -exec cp {} release/${{ matrix.model }}/ \;
+
+          find .. -maxdepth 1 -name "*.changes" \
+            -exec cp {} release/${{ matrix.model }}/ \;
+
+          find .. -maxdepth 1 -name "*.buildinfo" \
+            -exec cp {} release/${{ matrix.model }}/ \;
+
+          ls -lh release/${{ matrix.model }}
+
+      - name: Upload Packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.model }}
+          path: release/${{ matrix.model }}
