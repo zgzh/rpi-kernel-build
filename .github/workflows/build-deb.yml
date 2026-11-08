@@ -1,4 +1,4 @@
-name: Build Debian Kernel Packages in Docker
+name: Build Debian Kernel Packages
 
 on:
   workflow_dispatch:
@@ -6,10 +6,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    
-    # 直接让整个 Job 运行在一个标准的 Ubuntu 22.04 容器内，彻底隔离宿主机杂乱的源
-    container:
-      image: ubuntu:22.04
 
     strategy:
       fail-fast: false
@@ -24,13 +20,6 @@ jobs:
     name: Build DEB ${{ matrix.model }}
 
     steps:
-      - name: Install Git and Essentials
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update && apt-get install -y --no-install-recommends \
-            git \
-            ca-certificates
-
       - name: Checkout Raspberry Pi Linux
         uses: actions/checkout@v4
         with:
@@ -41,8 +30,10 @@ jobs:
 
       - name: Install Build Dependencies
         run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update && apt-get install -y --no-install-recommends \
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update
+
+          sudo apt-get install -y \
             build-essential \
             bc \
             bison \
@@ -50,6 +41,7 @@ jobs:
             rsync \
             cpio \
             kmod \
+            git \
             fakeroot \
             debhelper \
             dwarves \
@@ -57,8 +49,7 @@ jobs:
             libelf-dev \
             libdw-dev \
             libncurses-dev \
-            gcc-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu
+            crossbuild-essential-arm64
 
       - name: Configure Kernel
         run: |
@@ -98,6 +89,7 @@ jobs:
             KDEB_PKGVERSION=$(date +%Y%m%d)-${GITHUB_RUN_NUMBER} \
             KDEB_CHANGELOG_DIST=bookworm \
             KBUILD_DEBARCH=arm64 \
+            KDEB_FLAGS="-aarm64 -uc -us" \
             -j$(nproc) \
             bindeb-pkg
 
