@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
 
     strategy:
       fail-fast: false
@@ -28,28 +28,26 @@ jobs:
           path: 'linux'
           fetch-depth: 1
 
-      - name: Install Build Dependencies
+      - name: Download Official Arm Toolchain (No Apt Needed)
         run: |
-          sudo dpkg --add-architecture arm64
-          sudo apt-get update
+          echo "Downloading Arm GNU Toolchain..."
+          wget -q https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz
+          
+          tar -xf arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz
+          
+          TOOLCHAIN_PATH=$(pwd)/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu/bin
+          echo "$TOOLCHAIN_PATH" >> $GITHUB_PATH
+          
+          aarch64-none-linux-gnu-gcc --version
 
-          sudo apt-get install -y \
-            build-essential \
-            bc \
-            bison \
-            flex \
-            rsync \
-            cpio \
-            kmod \
-            git \
+      - name: Install Minimal Build Utilities
+        run: |
+          sudo apt-get install -y --no-install-recommends \
             fakeroot \
             debhelper \
             dwarves \
-            libssl-dev \
             libelf-dev \
-            libdw-dev \
-            libncurses-dev \
-            crossbuild-essential-arm64
+            libdw-dev || true
 
       - name: Configure Kernel
         run: |
@@ -57,7 +55,7 @@ jobs:
 
           make \
             ARCH=arm64 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-none-linux-gnu- \
             ${{ matrix.defconfig }}
 
           ./scripts/config --enable CONFIG_BPF
@@ -68,13 +66,8 @@ jobs:
 
           make \
             ARCH=arm64 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-none-linux-gnu- \
             olddefconfig
-
-      - name: Show Kernel Release
-        run: |
-          cd linux
-          make kernelrelease
 
       - name: Build Debian Packages
         run: |
@@ -85,11 +78,10 @@ jobs:
 
           make \
             ARCH=arm64 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-none-linux-gnu- \
             KDEB_PKGVERSION=$(date +%Y%m%d)-${GITHUB_RUN_NUMBER} \
             KDEB_CHANGELOG_DIST=bookworm \
             KBUILD_DEBARCH=arm64 \
-            KDEB_FLAGS="-aarm64 -uc -us" \
             -j$(nproc) \
             bindeb-pkg
 
