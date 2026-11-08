@@ -28,17 +28,9 @@ jobs:
           path: 'linux'
           fetch-depth: 1
 
-      - name: Download Official Arm Toolchain
+      - name: Verify Preinstalled Toolchain
         run: |
-          echo "Downloading Arm GNU Toolchain..."
-          wget -q https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz
-          
-          tar -xf arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu.tar.xz
-          
-          TOOLCHAIN_PATH=$(pwd)/arm-gnu-toolchain-13.2.rel1-x86_64-aarch64-none-linux-gnu/bin
-          echo "$TOOLCHAIN_PATH" >> $GITHUB_PATH
-          
-          aarch64-none-linux-gnu-gcc --version
+          aarch64-linux-gnu-gcc --version
 
       - name: Configure Kernel
         run: |
@@ -46,7 +38,7 @@ jobs:
 
           make \
             ARCH=arm64 \
-            CROSS_COMPILE=aarch64-none-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
             ${{ matrix.defconfig }}
 
           ./scripts/config --enable CONFIG_BPF
@@ -57,7 +49,7 @@ jobs:
 
           make \
             ARCH=arm64 \
-            CROSS_COMPILE=aarch64-none-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
             olddefconfig
 
       - name: Build Debian Packages
@@ -69,7 +61,7 @@ jobs:
 
           make \
             ARCH=arm64 \
-            CROSS_COMPILE=aarch64-none-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
             KDEB_PKGVERSION=$(date +%Y%m%d)-${GITHUB_RUN_NUMBER} \
             KDEB_CHANGELOG_DIST=bookworm \
             KBUILD_DEBARCH=arm64 \
