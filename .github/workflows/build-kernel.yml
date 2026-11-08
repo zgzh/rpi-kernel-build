@@ -1,10 +1,10 @@
-name: Kernel Source Test
+name: Kernel Config Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  source:
+  config:
     runs-on: ubuntu-24.04
 
     strategy:
@@ -20,7 +20,7 @@ jobs:
           - model: pi5
             defconfig: bcm2712_defconfig
 
-    name: Source ${{ matrix.model }}
+    name: Config ${{ matrix.model }}
 
     steps:
       - name: Checkout Raspberry Pi Linux
@@ -31,20 +31,56 @@ jobs:
           path: linux
           fetch-depth: 1
 
-      - name: Show Source Info
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            bc \
+            bison \
+            flex \
+            dwarves \
+            libssl-dev \
+            libelf-dev \
+            libdw-dev \
+            libncurses-dev \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu
+
+      - name: Verify pahole
+        run: |
+          which pahole
+          pahole --version
+
+      - name: Configure Kernel
         run: |
           cd linux
 
-          echo "MODEL=${{ matrix.model }}"
+          make \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            ${{ matrix.defconfig }}
+
+          ./scripts/config --enable CONFIG_BPF
+          ./scripts/config --enable CONFIG_BPF_SYSCALL
+          ./scripts/config --enable CONFIG_DEBUG_INFO
+          ./scripts/config --enable CONFIG_DEBUG_INFO_BTF
+          ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF5
+
+          make \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            olddefconfig
+
+      - name: Verify Config
+        run: |
+          cd linux
+
+          grep '^CONFIG_BPF=y' .config
+          grep '^CONFIG_BPF_SYSCALL=y' .config
+          grep '^CONFIG_DEBUG_INFO=y' .config
+          grep '^CONFIG_DEBUG_INFO_BTF=y' .config
 
           echo
-          echo "Commit:"
-          git rev-parse HEAD
-
-          echo
-          echo "Latest:"
-          git log -1 --oneline
-
-          echo
-          echo "Top files:"
-          ls -lah | head
+          echo "Kernel release:"
+          make kernelrelease
