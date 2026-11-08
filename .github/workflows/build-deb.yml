@@ -1,11 +1,15 @@
-name: Build Debian Kernel Packages
+name: Build Debian Kernel Packages in Docker
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    
+    # 直接让整个 Job 运行在一个标准的 Ubuntu 22.04 容器内，彻底隔离宿主机杂乱的源
+    container:
+      image: ubuntu:22.04
 
     strategy:
       fail-fast: false
@@ -20,6 +24,13 @@ jobs:
     name: Build DEB ${{ matrix.model }}
 
     steps:
+      - name: Install Git and Essentials
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update && apt-get install -y --no-install-recommends \
+            git \
+            ca-certificates
+
       - name: Checkout Raspberry Pi Linux
         uses: actions/checkout@v4
         with:
@@ -28,23 +39,10 @@ jobs:
           path: 'linux'
           fetch-depth: 1
 
-      - name: Purge and Recreate Clean Apt Sources
-        run: |
-          # 1. 彻底清空所有默认的不可控源文件
-          sudo rm -f /etc/apt/sources.list.d/*
-          sudo rm -f /etc/apt/sources.list
-          
-          # 2. 手动写入一个极其干净、只针对 amd64 的标准 main/universe 官方源（不带 security 杂项索引）
-          echo "deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse" | sudo tee /etc/apt/sources.list
-          echo "deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
-          
-          # 3. 清理缓存
-          sudo apt-get clean
-
       - name: Install Build Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update && apt-get install -y --no-install-recommends \
             build-essential \
             bc \
             bison \
@@ -52,7 +50,6 @@ jobs:
             rsync \
             cpio \
             kmod \
-            git \
             fakeroot \
             debhelper \
             dwarves \
