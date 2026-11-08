@@ -84,3 +84,56 @@ jobs:
           echo
           echo "Kernel release:"
           make kernelrelease
+
+      - name: Build Debian Packages
+        run: |
+          cd linux
+
+          export KBUILD_BUILD_USER=github
+          export KBUILD_BUILD_HOST=actions
+
+          make \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            KDEB_PKGVERSION=$(date +%Y%m%d)-${GITHUB_RUN_NUMBER}-${{ matrix.model }} \
+            -j$(nproc) \
+            bindeb-pkg
+
+      - name: Verify vmlinux
+        run: |
+          cd linux
+
+          test -f vmlinux
+
+          echo "===== vmlinux ====="
+
+          ls -lh vmlinux
+
+          file vmlinux
+
+      - name: Verify BTF Section
+        run: |
+          cd linux
+
+          echo "===== BTF ====="
+
+          readelf -S vmlinux | grep '\.BTF'
+
+      - name: Collect Packages
+        run: |
+          mkdir -p release/${{ matrix.model }}
+
+          find .. -maxdepth 1 -name "*.deb" \
+            -exec cp {} release/${{ matrix.model }}/ \;
+
+          find .. -maxdepth 1 -name "*.changes" \
+            -exec cp {} release/${{ matrix.model }}/ \;
+
+          find .. -maxdepth 1 -name "*.buildinfo" \
+            -exec cp {} release/${{ matrix.model }}/ \;
+
+      - name: Upload Packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ matrix.model }}
+          path: release/${{ matrix.model }}
