@@ -25,14 +25,13 @@ jobs:
         with:
           repository: raspberrypi/linux
           ref: rpi-6.18.y
-          path: linux
+          path: 'linux'
           fetch-depth: 1
 
-      - name: Install Build Dependencies
+      - name: Install Minimal Build Dependencies
         run: |
-          sudo apt-get update
-
-          sudo apt-get install -y \
+          # 仅安装编译必需的核心工具和交叉编译器，不进行多余的 apt 更新和架构添加
+          sudo apt-get install -y --no-install-recommends \
             build-essential \
             bc \
             bison \
