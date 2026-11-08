@@ -94,19 +94,16 @@ jobs:
           cd linux
           dpkg-checkbuilddeps debian/control || true
 
-      - name: Build Debian Packages
+
+      - name: Build Kernel
         run: |
           cd linux
-
-          export KBUILD_BUILD_USER=github
-          export KBUILD_BUILD_HOST=actions
 
           make \
             ARCH=arm64 \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            KDEB_PKGVERSION=$(date +%Y%m%d)-${GITHUB_RUN_NUMBER}-${{ matrix.model }} \
             -j$(nproc) \
-            bindeb-pkg
+            Image modules dtbs
 
       - name: Verify vmlinux
         run: |
@@ -114,32 +111,40 @@ jobs:
 
           test -f vmlinux
 
-          echo "===== vmlinux ====="
-
           ls -lh vmlinux
 
           file vmlinux
 
-      - name: Verify BTF Section
+      - name: Verify BTF
         run: |
           cd linux
 
-          echo "===== BTF ====="
-
           readelf -S vmlinux | grep '\.BTF'
 
-      - name: Collect Packages
+      - name: Package Output
         run: |
-          mkdir -p release/${{ matrix.model }}
+          cd linux
 
-          find .. -maxdepth 1 -name "*.deb" \
-            -exec cp {} release/${{ matrix.model }}/ \;
+          mkdir -p ../release/${{ matrix.model }}/boot
+          mkdir -p ../release/${{ matrix.model }}/modules
 
-          find .. -maxdepth 1 -name "*.changes" \
-            -exec cp {} release/${{ matrix.model }}/ \;
+          cp arch/arm64/boot/Image \
+            ../release/${{ matrix.model }}/boot/
 
-          find .. -maxdepth 1 -name "*.buildinfo" \
-            -exec cp {} release/${{ matrix.model }}/ \;
+          cp arch/arm64/boot/dts/broadcom/*.dtb \
+            ../release/${{ matrix.model }}/boot/ || true
+
+          cp arch/arm64/boot/dts/overlays/*.dtbo \
+            ../release/${{ matrix.model }}/boot/ || true
+
+          cp arch/arm64/boot/dts/overlays/README \
+            ../release/${{ matrix.model }}/boot/ || true
+
+          make \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            INSTALL_MOD_PATH=../release/${{ matrix.model }}/modules \
+            modules_install
 
       - name: Upload Packages
         uses: actions/upload-artifact@v4
