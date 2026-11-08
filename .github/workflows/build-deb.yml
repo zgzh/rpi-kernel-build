@@ -5,12 +5,36 @@ on:
   push:
     branches:
       - rpi-6.18.y
+  schedule:
+    - cron: '0 2 * * *'
 
 permissions:
   contents: write
 
 jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.check.outputs.has_changes }}
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check Upstream Changes
+        id: check
+        run: |
+          git remote add upstream https://github.com/raspberrypi/linux.git
+          git fetch upstream rpi-6.18.y
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse upstream/rpi-6.18.y)" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
   build:
+    needs: check-changes
+    if: needs.check-changes.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -42,20 +66,7 @@ jobs:
       - name: Install Dependencies & Toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            bc \
-            bison \
-            flex \
-            libssl-dev \
-            libelf-dev \
-            libdw-dev \
-            debhelper \
-            pahole \
-            git \
-            gcc-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu \
-            dpkg-dev
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev libdw-dev debhelper pahole git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu dpkg-dev
 
       - name: Configure Kernel with BTF
         run: |
@@ -75,7 +86,6 @@ jobs:
         run: |
           PKG_DIR="rpi-boot-configurator"
           mkdir -p ${PKG_DIR}/DEBIAN
-          
           cat << 'EOF_CTRL' > ${PKG_DIR}/DEBIAN/control
           Package: rpi-boot-configurator-${{ matrix.board }}
           Version: 1.0-${{ github.run_number }}
@@ -83,42 +93,27 @@ jobs:
           Priority: optional
           Architecture: all
           Maintainer: RPi Builder <noreply@github.com>
-          Description: Automated boot and config.txt configurator for Raspberry Pi ${{ matrix.board_num }}
-           Automatically copies vmlinuz to firmware/ and configures config.txt.
+          Description: Automated boot config for Raspberry Pi ${{ matrix.board_num }}
           EOF_CTRL
-
           cat << 'EOF_POST' > ${PKG_DIR}/DEBIAN/postinst
           #!/bin/bash
           set -e
           if [ "$1" = "configure" ]; then
               BOOT_DIR="/boot/firmware"
               [ ! -d "$BOOT_DIR" ] && BOOT_DIR="/boot"
-              
-              # 自动获取当前新安装的 vmlinuz 和 initrd 文件名
               LATEST_VMLINUZ=$(ls -t /boot/vmlinuz-* 2>/dev/null | head -n 1 | xargs basename || true)
               LATEST_INITRD=$(ls -t /boot/initrd.img-* 2>/dev/null | head -n 1 | xargs basename || true)
-              
-              if [ -n "$LATEST_VMLINUZ" ] && [ -f "/boot/${LATEST_VMLINUZ}" ]; then
-                  echo "==> Copying ${LATEST_VMLINUZ} to ${BOOT_DIR}/"
-                  cp "/boot/${LATEST_VMLINUZ}" "${BOOT_DIR}/"
-              fi
-              
+              [ -n "$LATEST_VMLINUZ" ] && [ -f "/boot/${LATEST_VMLINUZ}" ] && cp "/boot/${LATEST_VMLINUZ}" "${BOOT_DIR}/"
               CONFIG_FILE="${BOOT_DIR}/config.txt"
               if [ -f "$CONFIG_FILE" ] && [ -n "$LATEST_VMLINUZ" ]; then
-                  echo "==> Updating ${CONFIG_FILE}..."
                   sed -i '/^kernel=/d' "$CONFIG_FILE"
                   sed -i '/^initramfs /d' "$CONFIG_FILE"
-                  
                   echo "kernel=${LATEST_VMLINUZ}" >> "$CONFIG_FILE"
-                  if [ -n "$LATEST_INITRD" ] && [ -f "/boot/${LATEST_INITRD}" ]; then
-                      echo "initramfs ${LATEST_INITRD} followkernel" >> "$CONFIG_FILE"
-                  fi
-                  echo "==> Boot configuration updated successfully."
+                  [ -n "$LATEST_INITRD" ] && [ -f "/boot/${LATEST_INITRD}" ] && echo "initramfs ${LATEST_INITRD} followkernel" >> "$CONFIG_FILE"
               fi
           fi
           exit 0
           EOF_POST
-          
           chmod +x ${PKG_DIR}/DEBIAN/postinst
           dpkg-deb --build ${PKG_DIR}
           mkdir -p deb_output
@@ -135,8 +130,4 @@ jobs:
         with:
           tag_name: kernel-${{ matrix.board }}-deb-v6.18-${{ github.run_number }}
           name: "Raspberry Pi ${{ matrix.board_num }} Kernel v6.18 + Boot Configurator"
-          body: |
-            自动化 v6.18 安装包（包含自动复制 vmlinuz 与更新 config.txt 脚本）：
-            - 包含内核 `.deb` 核心包
-            - 包含升级版的 `rpi-boot-configurator-${{ matrix.board }}`
           files: kernel-${{ matrix.board }}-deb-v6.18.tar.gz
