@@ -28,13 +28,19 @@ jobs:
           path: 'linux'
           fetch-depth: 1
 
-      - name: Fix Apt Sources for AMD64 Only
+      - name: Force AMD64 Only and Clean Up Sources
         run: |
-          # 强制将 Ubuntu 官方源限定为 [arch=amd64]，防止其去拉取不存在的 arm64 索引
-          sudo sed -i 's|deb http|deb [arch=amd64] http|g' /etc/apt/sources.list
-          if [ -d /etc/apt/sources.list.d ]; then
-            sudo find /etc/apt/sources.list.d -name "*.list" -exec sudo sed -i 's|deb http|deb [arch=amd64] http|g' {} +
+          # 1. 确保系统架构只保留 amd64
+          sudo dpkg --remove-architecture arm64 || true
+          
+          # 2. 如果是现代 deb822 格式的 ubuntu.sources，直接修改 Architectures 字段或通过 sed 剔除 arm64
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's/Architectures:.*$/Architectures: amd64/g' /etc/apt/sources.list.d/ubuntu.sources
           fi
+
+          # 3. 针对传统的 sources.list 加上 [arch=amd64]
+          sudo sed -i 's|deb http|deb [arch=amd64] http|g' /etc/apt/sources.list 2>/dev/null || true
+          
           sudo apt-get clean
 
       - name: Install Build Dependencies
