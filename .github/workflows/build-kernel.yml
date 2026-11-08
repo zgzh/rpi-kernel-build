@@ -12,7 +12,7 @@ jobs:
       matrix:
         include:
           - model: pi3
-            defconfig: bcmrpi3_defconfig
+            defconfig: bcm2711_defconfig
 
           - model: pi4
             defconfig: bcm2711_defconfig
