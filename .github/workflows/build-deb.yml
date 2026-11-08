@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
 
     strategy:
       fail-fast: false
@@ -23,15 +23,15 @@ jobs:
       - name: Checkout Raspberry Pi Linux
         uses: actions/checkout@v4
         with:
-          repository: raspberrypi/linux
-          ref: rpi-6.18.y
+          repository: 'raspberrypi/linux'
+          ref: 'rpi-6.18.y'
           path: 'linux'
           fetch-depth: 1
 
-      - name: Install Minimal Build Dependencies
+      - name: Install Build Dependencies
         run: |
-          # 仅安装编译必需的核心工具和交叉编译器，不进行多余的 apt 更新和架构添加
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt-get update
+          sudo apt-get install -y \
             build-essential \
             bc \
             bison \
