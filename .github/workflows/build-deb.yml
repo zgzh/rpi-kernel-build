@@ -75,7 +75,6 @@ jobs:
         run: |
           PKG_DIR="rpi-boot-configurator"
           mkdir -p ${PKG_DIR}/DEBIAN
-          mkdir -p ${PKG_DIR}/etc/rpi-boot
           
           cat << 'EOF_CTRL' > ${PKG_DIR}/DEBIAN/control
           Package: rpi-boot-configurator-${{ matrix.board }}
@@ -85,7 +84,7 @@ jobs:
           Architecture: all
           Maintainer: RPi Builder <noreply@github.com>
           Description: Automated boot and config.txt configurator for Raspberry Pi ${{ matrix.board_num }}
-           Automatically configures /boot/config.txt and kernel targets for Raspberry Pi ${{ matrix.board_num }}.
+           Automatically copies vmlinuz to firmware/ and configures config.txt.
           EOF_CTRL
 
           cat << 'EOF_POST' > ${PKG_DIR}/DEBIAN/postinst
@@ -95,16 +94,26 @@ jobs:
               BOOT_DIR="/boot/firmware"
               [ ! -d "$BOOT_DIR" ] && BOOT_DIR="/boot"
               
-              TARGET_IMG="${{ matrix.kernel_img }}"
-              echo "==> Configuring boot for Raspberry Pi (${{ matrix.board }}) -> target: ${TARGET_IMG}"
+              # 自动获取当前新安装的 vmlinuz 和 initrd 文件名
+              LATEST_VMLINUZ=$(ls -t /boot/vmlinuz-* 2>/dev/null | head -n 1 | xargs basename || true)
+              LATEST_INITRD=$(ls -t /boot/initrd.img-* 2>/dev/null | head -n 1 | xargs basename || true)
               
-              if [ -f "${BOOT_DIR}/config.txt" ]; then
-                  if grep -q "^kernel=" "${BOOT_DIR}/config.txt"; then
-                      sed -i "s/^kernel=.*/kernel=${TARGET_IMG}/" "${BOOT_DIR}/config.txt"
-                  else
-                      echo "kernel=${TARGET_IMG}" >> "${BOOT_DIR}/config.txt"
+              if [ -n "$LATEST_VMLINUZ" ] && [ -f "/boot/${LATEST_VMLINUZ}" ]; then
+                  echo "==> Copying ${LATEST_VMLINUZ} to ${BOOT_DIR}/"
+                  cp "/boot/${LATEST_VMLINUZ}" "${BOOT_DIR}/"
+              fi
+              
+              CONFIG_FILE="${BOOT_DIR}/config.txt"
+              if [ -f "$CONFIG_FILE" ] && [ -n "$LATEST_VMLINUZ" ]; then
+                  echo "==> Updating ${CONFIG_FILE}..."
+                  sed -i '/^kernel=/d' "$CONFIG_FILE"
+                  sed -i '/^initramfs /d' "$CONFIG_FILE"
+                  
+                  echo "kernel=${LATEST_VMLINUZ}" >> "$CONFIG_FILE"
+                  if [ -n "$LATEST_INITRD" ] && [ -f "/boot/${LATEST_INITRD}" ]; then
+                      echo "initramfs ${LATEST_INITRD} followkernel" >> "$CONFIG_FILE"
                   fi
-                  echo "==> Updated /boot/config.txt kernel=${TARGET_IMG}"
+                  echo "==> Boot configuration updated successfully."
               fi
           fi
           exit 0
@@ -127,7 +136,7 @@ jobs:
           tag_name: kernel-${{ matrix.board }}-deb-v6.18-${{ github.run_number }}
           name: "Raspberry Pi ${{ matrix.board_num }} Kernel v6.18 + Boot Configurator"
           body: |
-            自动拉取树莓派官方最新源码并编译的 v6.18 安装包：
-            - 包含官方最新内核 `.deb` 核心包
-            - 包含专用的引导配置辅助包 (`rpi-boot-configurator-${{ matrix.board }}`)
+            自动化 v6.18 安装包（包含自动复制 vmlinuz 与更新 config.txt 脚本）：
+            - 包含内核 `.deb` 核心包
+            - 包含升级版的 `rpi-boot-configurator-${{ matrix.board }}`
           files: kernel-${{ matrix.board }}-deb-v6.18.tar.gz
