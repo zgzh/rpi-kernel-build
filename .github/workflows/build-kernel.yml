@@ -1,4 +1,4 @@
-name: Test Workflow
+name: Matrix Test
 
 on:
   workflow_dispatch:
@@ -7,11 +7,20 @@ jobs:
   test:
     runs-on: ubuntu-24.04
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    strategy:
+      fail-fast: false
+      matrix:
+        model:
+          - pi3
+          - pi4
+          - pi5
 
-      - name: Show Info
+    name: Test ${{ matrix.model }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Matrix Info
         run: |
-          echo "GitHub Actions works"
+          echo "MODEL=${{ matrix.model }}"
           uname -a
