@@ -98,13 +98,21 @@ jobs:
           Architecture: all
           Maintainer: RPi Builder <noreply@github.com>
           Description: Automated boot and config.txt configurator for Raspberry Pi ${{ matrix.board_num }}
-           Automatically copies vmlinuz to firmware/ and configures config.txt.
+           Automatically sets MODULES=most and configures boot parameters.
           EOF_CTRL
 
           cat << 'EOF_POST' > ${PKG_DIR}/DEBIAN/postinst
           #!/bin/bash
           set -e
           if [ "$1" = "configure" ]; then
+              # 1. 自动修复 initramfs 配置，防止新系统安装时报设备识别错误
+              INITRAMFS_CONF="/etc/initramfs-tools/initramfs.conf"
+              if [ -f "$INITRAMFS_CONF" ]; then
+                  echo "==> Ensuring MODULES=most in $INITRAMFS_CONF..."
+                  sed -i 's/^MODULES=.*/MODULES=most/g' "$INITRAMFS_CONF"
+              fi
+
+              # 2. 同步内核镜像与引导配置
               BOOT_DIR="/boot/firmware"
               [ ! -d "$BOOT_DIR" ] && BOOT_DIR="/boot"
               
