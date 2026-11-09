@@ -79,6 +79,9 @@ jobs:
       - name: Build Kernel Debian Packages
         run: |
           export DEB_HOST_ARCH=arm64
+          KERNEL_RELEASE=$(make kernelrelease)
+          export KDEB_PKGVERSION="99:${KERNEL_RELEASE}-${{ github.run_number }}-1"
+          echo "==> Building kernel with Epoch version: $KDEB_PKGVERSION"
           sed -i 's/dpkg-buildpackage /dpkg-buildpackage -d /g' scripts/Makefile.package
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j1
 
