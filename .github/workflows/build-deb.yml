@@ -1,10 +1,10 @@
-name: Cross-Compile Raspberry Pi Kernels (v6.18 DEB)
+name: Cross-Compile Raspberry Pi Kernels (v7.4 DEB)
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - rpi-6.18.y
+      - rpi-7.4.y
   schedule:
     - cron: '0 2 * * *'
 
@@ -25,8 +25,8 @@ jobs:
         id: check
         run: |
           git remote add upstream https://github.com/raspberrypi/linux.git
-          git fetch upstream rpi-6.18.y
-          if [ "$(git rev-parse HEAD)" != "$(git rev-parse upstream/rpi-6.18.y)" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          git fetch upstream rpi-7.4.y
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse upstream/rpi-7.4.y)" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
@@ -60,8 +60,8 @@ jobs:
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           git remote add upstream https://github.com/raspberrypi/linux.git || true
-          git fetch upstream rpi-6.18.y
-          git merge upstream/rpi-6.18.y --no-edit --allow-unrelated-histories
+          git fetch upstream rpi-7.4.y
+          git merge upstream/rpi-7.4.y --no-edit --allow-unrelated-histories
 
       - name: Install Dependencies & Toolchain
         run: |
@@ -81,7 +81,7 @@ jobs:
           export DEB_HOST_ARCH=arm64
           KERNEL_RELEASE=$(make kernelrelease)
           export KDEB_PKGVERSION="99:${KERNEL_RELEASE}-${{ github.run_number }}-1"
-          echo "==> Building kernel with Epoch version: $KDEB_PKGVERSION"
+          echo "==> Building kernel 7.4 with Epoch version: $KDEB_PKGVERSION"
           sed -i 's/dpkg-buildpackage /dpkg-buildpackage -d /g' scripts/Makefile.package
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j1
 
@@ -126,11 +126,11 @@ jobs:
         run: |
           mkdir -p deb_output
           mv ../*.deb deb_output/ 2>/dev/null || true
-          tar -czf kernel-${{ matrix.board }}-deb-v6.18.tar.gz -C deb_output .
+          tar -czf kernel-${{ matrix.board }}-deb-v7.4.tar.gz -C deb_output .
 
       - name: Release and Upload Deb Asset
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: kernel-${{ matrix.board }}-deb-v6.18-${{ github.run_number }}
-          name: "Raspberry Pi ${{ matrix.board_num }} Kernel v6.18 + Boot Configurator"
-          files: kernel-${{ matrix.board }}-deb-v6.18.tar.gz
+          tag_name: kernel-${{ matrix.board }}-deb-v7.4-${{ github.run_number }}
+          name: "Raspberry Pi ${{ matrix.board_num }} Kernel v7.4 + Boot Configurator"
+          files: kernel-${{ matrix.board }}-deb-v7.4.tar.gz
