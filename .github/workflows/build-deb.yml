@@ -89,34 +89,49 @@ jobs:
         run: |
           PKG_DIR="rpi-boot-configurator"
           mkdir -p ${PKG_DIR}/DEBIAN
+          
           cat << 'EOF_CTRL' > ${PKG_DIR}/DEBIAN/control
           Package: rpi-boot-configurator-${{ matrix.board }}
-          Version: 1.0-${{ github.run_number }}
+          Version: 99:1.0-${{ github.run_number }}
           Section: utils
           Priority: optional
           Architecture: all
           Maintainer: RPi Builder <noreply@github.com>
-          Description: Automated boot config for Raspberry Pi ${{ matrix.board_num }}
+          Description: Automated boot and config.txt configurator for Raspberry Pi ${{ matrix.board_num }}
+           Automatically copies vmlinuz to firmware/ and configures config.txt.
           EOF_CTRL
+
           cat << 'EOF_POST' > ${PKG_DIR}/DEBIAN/postinst
           #!/bin/bash
           set -e
           if [ "$1" = "configure" ]; then
               BOOT_DIR="/boot/firmware"
               [ ! -d "$BOOT_DIR" ] && BOOT_DIR="/boot"
+              
               LATEST_VMLINUZ=$(ls -t /boot/vmlinuz-* 2>/dev/null | head -n 1 | xargs basename || true)
               LATEST_INITRD=$(ls -t /boot/initrd.img-* 2>/dev/null | head -n 1 | xargs basename || true)
-              [ -n "$LATEST_VMLINUZ" ] && [ -f "/boot/${LATEST_VMLINUZ}" ] && cp "/boot/${LATEST_VMLINUZ}" "${BOOT_DIR}/"
+              
+              if [ -n "$LATEST_VMLINUZ" ] && [ -f "/boot/${LATEST_VMLINUZ}" ]; then
+                  echo "==> Copying ${LATEST_VMLINUZ} to ${BOOT_DIR}/"
+                  cp "/boot/${LATEST_VMLINUZ}" "${BOOT_DIR}/"
+              fi
+              
               CONFIG_FILE="${BOOT_DIR}/config.txt"
               if [ -f "$CONFIG_FILE" ] && [ -n "$LATEST_VMLINUZ" ]; then
+                  echo "==> Updating ${CONFIG_FILE}..."
                   sed -i '/^kernel=/d' "$CONFIG_FILE"
                   sed -i '/^initramfs /d' "$CONFIG_FILE"
+                  
                   echo "kernel=${LATEST_VMLINUZ}" >> "$CONFIG_FILE"
-                  [ -n "$LATEST_INITRD" ] && [ -f "/boot/${LATEST_INITRD}" ] && echo "initramfs ${LATEST_INITRD} followkernel" >> "$CONFIG_FILE"
+                  if [ -n "$LATEST_INITRD" ] && [ -f "/boot/${LATEST_INITRD}" ]; then
+                      echo "initramfs ${LATEST_INITRD} followkernel" >> "$CONFIG_FILE"
+                  fi
+                  echo "==> Boot configuration updated successfully."
               fi
           fi
           exit 0
           EOF_POST
+          
           chmod +x ${PKG_DIR}/DEBIAN/postinst
           dpkg-deb --build ${PKG_DIR}
           mkdir -p deb_output
