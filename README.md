@@ -34,7 +34,7 @@
 ### 第一步：解压下载的资产
 将从 GitHub Releases 下载的压缩包上传至树莓派并解压：
 ```bash
-tar -zxvf kernel-pi4-deb-v7.4.tar.gz && cd deb_output/
+tar -zxvf kernel-pi4-deb-v7.4.tar.gz
 ```
 
 ### 第二步：安装引导配置工具
