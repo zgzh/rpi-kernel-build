@@ -55,13 +55,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Sync Latest Upstream Kernel Source
+      - name: Clone Upstream Kernel Source
         run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "actions@github.com"
-          git remote add upstream https://github.com/raspberrypi/linux.git || true
-          git fetch upstream rpi-6.18.y
-          git merge upstream/rpi-6.18.y --no-edit --allow-unrelated-histories
+          git clone --depth=1 https://github.com/raspberrypi/linux.git -b rpi-6.18.y ../linux-src
 
       - name: Install Dependencies & Toolchain
         run: |
@@ -70,6 +66,7 @@ jobs:
 
       - name: Configure Kernel with BTF
         run: |
+          cd ../linux-src
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- ${{ matrix.defconfig }}
           ./scripts/config --enable CONFIG_DEBUG_INFO
           ./scripts/config --enable CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
@@ -78,6 +75,7 @@ jobs:
 
       - name: Build Kernel Debian Packages
         run: |
+          cd ../linux-src
           export DEB_HOST_ARCH=arm64
           KERNEL_RELEASE=$(make kernelrelease)
           export KDEB_PKGVERSION="99:${KERNEL_RELEASE}-${{ github.run_number }}-1"
@@ -125,6 +123,7 @@ jobs:
       - name: Package Deb Artifacts
         run: |
           mkdir -p deb_output
+          # 收集 ../linux-src 编译生成的 .deb 包到输出目录
           mv ../*.deb deb_output/ 2>/dev/null || true
           tar -czf kernel-${{ matrix.board }}-deb-v6.18.tar.gz -C deb_output .
 
