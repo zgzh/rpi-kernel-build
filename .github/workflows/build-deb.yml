@@ -120,16 +120,20 @@ jobs:
           mkdir -p deb_output
           mv ${PKG_DIR}.deb deb_output/
 
-      - name: Package Deb Artifacts
+      - name: Prepare Deb Artifacts Folder
         run: |
           mkdir -p deb_output
-          # 收集 ../linux-src 编译生成的 .deb 包到输出目录
+          # 收集外部源码目录编译生成的 deb 包
           mv ../*.deb deb_output/ 2>/dev/null || true
-          tar -czf kernel-${{ matrix.board }}-deb-v6.18.tar.gz -C deb_output .
+          # 收集当前目录生成的引导配置 deb 包
+          mv rpi-boot-configurator*.deb deb_output/ 2>/dev/null || true
+          # 自动清理掉几百MB的 -dbg 调试包，只保留核心安装包和 headers
+          rm -f deb_output/*-dbg*.deb || true
 
-      - name: Release and Upload Deb Asset
+      - name: Release and Upload Individual Deb Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: kernel-${{ matrix.board }}-deb-v6.18-${{ github.run_number }}
-          name: "Raspberry Pi ${{ matrix.board_num }} Kernel v6.18 + Boot Configurator"
-          files: kernel-${{ matrix.board }}-deb-v6.18.tar.gz
+          name: "Raspberry Pi ${{ matrix.board_num }} Kernel v6.18 (Individual DEBs)"
+          files: |
+            deb_output/*.deb
