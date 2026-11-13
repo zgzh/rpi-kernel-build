@@ -1,10 +1,11 @@
-name: Cross-Compile Raspberry Pi Kernels (v6.18 DEB)
+name: Cross-Compile Raspberry Pi Kernels (DEB)
 
 on:
   workflow_dispatch:
   push:
     branches:
       - rpi-6.18.y
+      - rpi-7.4.y
   schedule:
     - cron: '0 2 * * *'
 
@@ -25,8 +26,9 @@ jobs:
         id: check
         run: |
           git remote add upstream https://github.com/raspberrypi/linux.git
-          git fetch upstream rpi-6.18.y
-          if [ "$(git rev-parse HEAD)" != "$(git rev-parse upstream/rpi-6.18.y)" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          git fetch upstream $BRANCH_NAME
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse upstream/$BRANCH_NAME)" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
@@ -57,7 +59,8 @@ jobs:
 
       - name: Clone Upstream Kernel Source
         run: |
-          git clone --depth=1 https://github.com/raspberrypi/linux.git -b rpi-6.18.y ../linux-src
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          git clone --depth=1 https://github.com/raspberrypi/linux.git -b $BRANCH_NAME ../linux-src
 
       - name: Install Dependencies & Toolchain
         run: |
@@ -77,6 +80,10 @@ jobs:
         run: |
           cd ../linux-src
           export DEB_HOST_ARCH=arm64
+          
+          # 强制指定 initramfs 打包包含大部分常见驱动模块
+          sudo sed -i 's/^MODULES=.*/MODULES=most/' /etc/initramfs-tools/initramfs.conf || true
+          
           KERNEL_RELEASE=$(make kernelrelease)
           export KDEB_PKGVERSION="99:${KERNEL_RELEASE}-${{ github.run_number }}-1"
           echo "==> Building kernel with Epoch version: $KDEB_PKGVERSION"
@@ -133,7 +140,7 @@ jobs:
       - name: Release and Upload Individual Deb Assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: kernel-${{ matrix.board }}-deb-v6.18-${{ github.run_number }}
-          name: "Raspberry Pi ${{ matrix.board_num }} Kernel v6.18 (Individual DEBs)"
+          tag_name: kernel-${{ matrix.board }}-deb-${{ github.run_number }}
+          name: "Raspberry Pi ${{ matrix.board_num }} Kernel (Individual DEBs)"
           files: |
             deb_output/*.deb
