@@ -80,10 +80,6 @@ jobs:
         run: |
           cd ../linux-src
           export DEB_HOST_ARCH=arm64
-          
-          # 强制指定 initramfs 打包包含大部分常见驱动模块
-          sudo sed -i 's/^MODULES=.*/MODULES=most/' /etc/initramfs-tools/initramfs.conf || true
-          
           KERNEL_RELEASE=$(make kernelrelease)
           export KDEB_PKGVERSION="99:${KERNEL_RELEASE}-${{ github.run_number }}-1"
           echo "==> Building kernel with Epoch version: $KDEB_PKGVERSION"
@@ -94,6 +90,13 @@ jobs:
         run: |
           PKG_DIR="rpi-boot-configurator"
           mkdir -p ${PKG_DIR}/DEBIAN
+          mkdir -p ${PKG_DIR}/etc/initramfs-tools/conf.d
+
+          # 写入 drop-in 配置，优先级高于 initramfs.conf，强制目标机使用 MODULES=most
+          cat << 'EOF_CONF' > ${PKG_DIR}/etc/initramfs-tools/conf.d/99-rpi-modules.conf
+          MODULES=most
+          EOF_CONF
+
           cat << 'EOF_CTRL' > ${PKG_DIR}/DEBIAN/control
           Package: rpi-boot-configurator-${{ matrix.board }}
           Version: 1.0-${{ github.run_number }}
@@ -101,8 +104,21 @@ jobs:
           Priority: optional
           Architecture: all
           Maintainer: RPi Builder <noreply@github.com>
-          Description: Automated boot config for Raspberry Pi ${{ matrix.board_num }}
+          Description: Automated boot config and initramfs safeguard for Raspberry Pi ${{ matrix.board_num }}
           EOF_CTRL
+
+          # 安装前脚本：提前修正目标机 initramfs.conf，避免同批次安装 linux-image 时触发报障
+          cat << 'EOF_PRE' > ${PKG_DIR}/DEBIAN/preinst
+          #!/bin/bash
+          set -e
+          if [ "$1" = "install" ] || [ "$1" = "upgrade" ]; then
+              if [ -f /etc/initramfs-tools/initramfs.conf ]; then
+                  sed -i 's/^MODULES=.*/MODULES=most/' /etc/initramfs-tools/initramfs.conf || true
+              fi
+          fi
+          exit 0
+          EOF_PRE
+
           cat << 'EOF_POST' > ${PKG_DIR}/DEBIAN/postinst
           #!/bin/bash
           set -e
@@ -122,6 +138,8 @@ jobs:
           fi
           exit 0
           EOF_POST
+
+          chmod +x ${PKG_DIR}/DEBIAN/preinst
           chmod +x ${PKG_DIR}/DEBIAN/postinst
           dpkg-deb --build ${PKG_DIR}
           mkdir -p deb_output
@@ -130,11 +148,8 @@ jobs:
       - name: Prepare Deb Artifacts Folder
         run: |
           mkdir -p deb_output
-          # 收集外部源码目录编译生成的 deb 包
           mv ../*.deb deb_output/ 2>/dev/null || true
-          # 收集当前目录生成的引导配置 deb 包
           mv rpi-boot-configurator*.deb deb_output/ 2>/dev/null || true
-          # 自动清理掉几百MB的 -dbg 调试包，只保留核心安装包和 headers
           rm -f deb_output/*-dbg*.deb || true
 
       - name: Release and Upload Individual Deb Assets
