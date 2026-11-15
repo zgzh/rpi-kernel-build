@@ -92,7 +92,6 @@ jobs:
           mkdir -p ${PKG_DIR}/DEBIAN
           mkdir -p ${PKG_DIR}/etc/initramfs-tools/conf.d
 
-          # 写入 drop-in 配置，优先级高于 initramfs.conf，强制目标机使用 MODULES=most
           cat << 'EOF_CONF' > ${PKG_DIR}/etc/initramfs-tools/conf.d/99-rpi-modules.conf
           MODULES=most
           EOF_CONF
@@ -107,7 +106,6 @@ jobs:
           Description: Automated boot config and initramfs safeguard for Raspberry Pi ${{ matrix.board_num }}
           EOF_CTRL
 
-          # 安装前脚本：提前修正目标机 initramfs.conf，避免同批次安装 linux-image 时触发报障
           cat << 'EOF_PRE' > ${PKG_DIR}/DEBIAN/preinst
           #!/bin/bash
           set -e
