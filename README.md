@@ -24,5 +24,5 @@ sudo dpkg -i linux-image-*.deb linux-headers-*.deb
 sudo reboot
 
 第四步，验证内核与 BTF 状态：
-uname -a
+uname -a &&
 ls -lah /sys/kernel/btf/vmlinux
